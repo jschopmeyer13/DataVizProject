@@ -192,8 +192,23 @@ def coverage_stats(df_match, col1='personnelO', col2='personnelD', comp='epa'):
 # Graphing 
 
 def get_value(idx, column, players):
-	# print(column)
-	return players[players.nflId == idx][column].tolist()[0]
+	if not isinstance(idx, str):
+		idx = int(idx)
+		idx = str(idx)
+	# print(idx)
+	# print(idx)
+	player = players[players.nflId ==idx]
+	if len(player) == 0:
+		print(idx)
+
+	# print("this is the combine id", player.combineId)
+	# print(player.combin)
+	if player.combineId.isna().any():
+		print(player.displayName, player.nflId)
+		return np.nan
+	else:
+	# print(player)
+		return players[players.nflId == idx][column].tolist()[0]
 
 
 def get_xy(data, column, players):
@@ -204,6 +219,8 @@ def get_xy(data, column, players):
 		x_vals.append(get_value(k, column, players))
 		y_vals.append(v)
 	return x_vals, y_vals
+
+
 
 def get_college(data, column, players):
 	# print(column)
@@ -251,3 +268,24 @@ def get_columns(plays, games, week, player):
 	print(games.columns)
 	print(week.columns)
 	print(player.columns)
+
+
+import http.client
+
+conn = http.client.HTTPSConnection("api.sportradar.us")
+
+conn.request("GET", "/nfl/official/trial/v5/en/plays/06d50f40-10ca-4918-bda7-7df773a771f0/participation.xml?api_key={your_api_key}")
+
+
+res = conn.getresponse()
+data = res.read()
+
+print(data.decode("utf-8"))
+
+
+
+## Panda util function
+
+
+def remove_col(df, column):
+	return df.loc[:, df.columns != column]
