@@ -77,21 +77,20 @@ def get_team(row):
 	return away if poss==home else home
 
 
-def organize_by(keyword,event_word, plays, games, week, players, week_number):
+def organize_by(keyword,event_word, plays, games, week, players):
 	"""
 	Gets only players related to the chose keyword
 	"""
 
 	if keyword==None:
-		df_plays = plays[['playDescription','possessionTeam', 'gameId','playId']]
+		df_plays = plays[['playDescription','possessionTeam','quarter', 'gameId','playId']]
 	else:
 		plays = plays[plays.passResult == "IN"] # ! Getting only passes ruled interceptions
-		df_plays = plays[plays.playDescription.str.contains(keyword)][['playDescription','possessionTeam', 'gameId','playId']]
+		df_plays = plays[plays.playDescription.str.contains(keyword)][['playDescription','possessionTeam','quarter', 'gameId','playId']]
 
 	
 	df_merge_games = pd.merge(df_plays, games[['gameId', 'homeTeamAbbr', 'visitorTeamAbbr','week']], how='inner', on='gameId')
 
-	print(df_merge_games.shape)
 
 	df_merge_week = pd.merge(df_merge_games, week[['gameId', 'playId','nflId', 'displayName', 'event', 'x','y', 'frameId', 'week', 'position']], on=['gameId', 'playId', 'week'])
 	# getting only defensive players
@@ -132,7 +131,7 @@ def get_defender(row):
 	else:
 		return np.nan
 
-def defense_on_throw(keyword,event_word, plays, games, week, players, week_number):
+def defense_on_throw(keyword,event_word, plays, games, week, players):
 	"""
 	Looking for who pass is incomplete to. Then looking for the closest defender to the offensive player and in comparison to the ball.
 	"""
@@ -140,7 +139,7 @@ def defense_on_throw(keyword,event_word, plays, games, week, players, week_numbe
 	# gets all confirmed incomplete passes
 	plays = plays[plays.passResult == "I"]
 	if keyword==None:
-		df_plays = plays[['playDescription','possessionTeam', 'gameId','playId']]
+		df_plays = plays[['playDescription','possessionTeam', 'quarter', 'gameId','playId']]
 	else:
 		df_plays = plays[plays.playDescription.str.contains(keyword)][['playDescription','possessionTeam', 'gameId','playId']]
 	
@@ -192,27 +191,30 @@ def coverage_stats(df_match, col1='personnelO', col2='personnelD', comp='epa'):
 # Graphing 
 
 def get_value(idx, column, players):
-	if not isinstance(idx, str):
+	# print(idx, type(idx))
+
+	if isinstance(idx, float):
 		idx = int(idx)
 		idx = str(idx)
-	# print(idx)
-	# print(idx)
+	if isinstance(idx, str):
+		idx= float(idx)
+		idx = int(idx)
+		idx = str(idx)
+
+	missing = []
 	player = players[players.nflId ==idx]
+
 	if len(player) == 0:
 		print(idx)
 
-	# print("this is the combine id", player.combineId)
-	# print(player.combin)
-	if player.combineId.isna().any():
-		print(player.displayName, player.nflId)
+
+	if player[column].isna().any():
 		return np.nan
 	else:
-	# print(player)
 		return players[players.nflId == idx][column].tolist()[0]
 
 
 def get_xy(data, column, players):
-	# print(column)
 	x_vals = []
 	y_vals = []
 	for k, v in dict(data.nflId.value_counts()).items():
@@ -222,25 +224,131 @@ def get_xy(data, column, players):
 
 
 
-def get_college(data, column, players):
-	# print(column)
+# used to be get_college
+def get_agg(data, column, players, avg=False,return_dict=False):
+	
 	x_vals = []
 	d = {}
+	counts = {}
+	avg_dict = {}
 	y_vals = []
 	for k, v in dict(data.nflId.value_counts()).items():
 		temp = get_value(k, column, players)
 		if temp in d:
+			counts[temp] +=1
 			d[temp] +=v
+			# counts[temp].append(v)
+
 		else:
+			# counts[temp] = [v]
+			counts[temp] = 1
 			d[temp] = v
-	return sorted(d.items(), key=lambda pair: pair[1], reverse=False)
+
+		avg_dict[temp] = d[temp] / counts[temp]
+
+
+	if avg:
+		values = sorted(avg_dict.items(), key=lambda pair: pair[1], reverse=False)
+		x_vals, y_vals = [], []
+		for i in values:
+			x_vals.append(i[0])
+			y_vals.append(i[1])
+	else:
+		values= sorted(d.items(), key=lambda pair: pair[1], reverse=False)
+		x_vals, y_vals = [], []
+		for i in values:
+			x_vals.append(i[0])
+			y_vals.append(i[1])
+
+	if return_dict:
+		return values
+	else:
+		return x_vals, y_vals
 
 
 
+def plot_points(data, column, df, ylabel='Deflections',plot='scatter', agg='count'):
 
+	if agg=='count' or agg=='total':
+		x_vals, y_vals = get_xy(data, column, df)
+	elif agg=='sum':
+
+		x_vals, y_vals = get_agg(data, column, df, avg=False)
+		# x_vals, y_vals = [], []
+		# for i in values:
+		# 	x_vals.append(i[0])
+		# 	y_vals.append(i[1])
+
+	elif agg=='avg':
+		x_vals, y_vals  = get_agg(data, column, df, avg=True)
+		# x_vals, y_vals = [], []
+		# for i in values:
+		# 	x_vals.append(i[0])
+		# 	y_vals.append(i[1])
+
+
+	if plot=='scatter':
+		plt.scatter(x_vals, y_vals)
+		plt.xlabel(column)
+		y_final_label = "{} of {}".format(plot,ylabel)
+		plt.ylabel(y_final_label)
+		plt.title("Comparing {} of {} to {} for NFL Players".format(agg,column, y_final_label))
+
+		plt.show()
+
+	elif plot=='bar':
+		plt.bar(x_vals, y_vals)
+		plt.xlabel(column)
+		y_final_label = "{} of {}".format(plot,ylabel)
+		plt.ylabel(y_final_label)
+		plt.title("Comparing {} of {} to {} for NFL Players".format(agg,column, y_final_label))
+
+		plt.show()
+
+	# plt.scatter(x_vals, y_vals)
+	# plt.xlabel(column)
+	# y_final_label = "{} number of {}".format('avg' if avg else 'total',ylabel)
+
+	# plt.ylabel(y_final_label)
+	# plt.title("Comparing {} to {} for NFL Players".format(column, y_final_label))
+	# plt.show()
+
+
+def plot_map(filter_on, df_defense, df_comb, df_us, title,font_size='15'):
+	dict_vals = dict(get_agg(df_defense, filter_on, df_comb,return_dict=True))
+	df_us['state_count'] = df_us.STUSPS.apply(lambda row: dict_vals[row] if row in dict_vals else 0)
+	df_us['GEOID'] = df_us['GEOID'].astype(int)
+	df_temp = df_us[df_us.GEOID < 59]
+	df_temp = df_temp.reset_index(drop=True)
+	df_temp = df_temp[~df_temp.NAME.isin(['Hawaii', "Alaska"])]
+	variable = 'pop_density_per_hectare'
+
+	# set the range for the choropleth
+	vmin, vmax = 0, df_temp.state_count.max()
+	# create figure and axes for Matplotlib
+	fig, ax = plt.subplots(1, figsize=(10, 6))
+
+	df_temp.plot(column='state_count', cmap='Blues', linewidth=0.8, ax=ax, edgecolor='0.8',)
+
+	# Create colorbar as a legend
+	sm = plt.cm.ScalarMappable(cmap='Blues', norm=plt.Normalize(vmin=vmin, vmax=vmax))
+	# empty array for the data range
+	sm._A = []
+	# add the colorbar to the figure
+	cbar = fig.colorbar(sm)
+	# add a title
+	font_size = str(font_size)
+	ax.set_title(title, fontdict={'fontsize': font_size,'fontweight' : '3'})
+	# create an annotation for the data source
+	ax.annotate('Source: NFL Data Bowl, 2018',xy=(0.1, .08),  xycoords='figure fraction', horizontalalignment='left', verticalalignment='top', fontsize=12, color='#555555')
+	plt.show()
 
 ##----------DEPRECATED--------------
 
+
+def get_id(idx, players):
+	idx = str(idx)
+	return players[players.nflId == idx]
 
 def clean_keyword(names):
 	name_team = []
@@ -270,17 +378,18 @@ def get_columns(plays, games, week, player):
 	print(player.columns)
 
 
-import http.client
+def get_client():
+	import http.client
 
-conn = http.client.HTTPSConnection("api.sportradar.us")
+	conn = http.client.HTTPSConnection("api.sportradar.us")
 
-conn.request("GET", "/nfl/official/trial/v5/en/plays/06d50f40-10ca-4918-bda7-7df773a771f0/participation.xml?api_key={your_api_key}")
+	conn.request("GET", "/nfl/official/trial/v5/en/plays/06d50f40-10ca-4918-bda7-7df773a771f0/participation.xml?api_key={your_api_key}")
 
 
-res = conn.getresponse()
-data = res.read()
+	res = conn.getresponse()
+	data = res.read()
 
-print(data.decode("utf-8"))
+	print(data.decode("utf-8"))
 
 
 
